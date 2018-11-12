@@ -5,8 +5,9 @@ using System.Text;
 using System.Xml;
 using MonoMod;
 using UnityEngine;
+using Assembly_CSharp;
 #pragma warning disable CS0626
-namespace Modding
+namespace Assembly_CSharp
 {
     public static class Utils
     {
@@ -69,7 +70,10 @@ namespace Modding
 
         public List<string> GetModFiles(string postfix)
         {
+            Debug.Log(String.Format("We're looking for files ending with {0}", postfix));
             string modDirectory = Path.Combine(Application.persistentDataPath, "Mods");
+            /* Make the mod directory if it doesn't exist. */
+            DirectoryInfo di = Directory.CreateDirectory(modDirectory); // Don't need to check first.
             string[] filenames = Directory.GetFiles(modDirectory, "*", SearchOption.AllDirectories);
             List<string> finalList = new List<string>();
             foreach (string path in filenames)
@@ -84,7 +88,7 @@ namespace Modding
 
         }
 
-
+        /* patch CreateSpellObjectPrototypes to read mod files */
         public extern void orig_CreateSpellObjectPrototypes();
         public void CreateSpellObjectPrototypes()
         {
@@ -96,6 +100,7 @@ namespace Modding
             }
         }
 
+        /* broken out from original CreateArtifactObjectPrototypes */
         public void ReadArtifactFile(string xmlData)
         {
             if (this.artDictionary == null)
@@ -114,6 +119,11 @@ namespace Modding
                     artifactObject.sprite = this.GetSprite(artifactObject.itemID);
                     artifactObject.type = ItemType.Art;
                     artifactObject.artObj = artifactObject;
+                    if (artifactObject.tags.Contains(Tag.BonusRe))
+                    {
+                        ArtifactObject artifactObject2 = artifactObject;
+                        artifactObject2.flavor += " (BonusRe)";
+                    }
                     this.artDictionary[artifactObject.itemID] = artifactObject;
                     this.itemDictionary[artifactObject.itemID] = artifactObject;
                 }
@@ -121,18 +131,18 @@ namespace Modding
             }
         }
 
+        /* patch CreateArtifactObjectPrototypes */
         public extern void orig_CreateArtifactObjectPrototypes();
         public void CreateArtifactObjectPrototypes()
         {
-            Debug.Log("ENTERING ARTIFACTS");
             ReadArtifactFile(S.I.xmlReader.GetDataFile("Artifacts.xml"));
             foreach (string mod in GetModFiles("Artifacts.xml"))
             {
-                Debug.Log("REACHED HERE");
                 ReadArtifactFile(S.I.xmlReader.GetDataFile(mod));
             }
         }
 
+        /* patch LoadEffectsLua */
         public extern void orig_LoadEffectsLua();
         public void LoadEffectsLua()
         {
@@ -145,6 +155,23 @@ namespace Modding
                 text = text.Insert(0, string.Format("{0} ", S.I.xmlReader.GetDataFile(mod)));
             }
             new EffectActions(text);
+        }
+    }
+
+    [MonoModPatch("global::Effect")]
+    public enum patch_Effect
+    {
+        // thanks 0x0ade for your help!
+        Custom = 0x0ade
+    }
+
+    [MonoModPatch("global::SpellObject")]
+    public class patch_SpellObject
+    {
+        [MonoModAdded]
+        public void Log(string value)
+        {
+            Debug.Log(value);
         }
     }
 
@@ -163,19 +190,16 @@ namespace Modding
         public extern string orig_GetDataFile(string dataFile);
         public string GetDataFile(string dataFile)
         {
-            Debug.Log(string.Format("Getting DataFile {0}", dataFile));
+            Debug.Log(String.Format("Getting DataFile {0}", dataFile));
             /* Check if it exists in the cache already. */
             string cachedValue = "";
             if (cache.TryGetValue(dataFile, out cachedValue))
             {
-                Debug.Log("Getting cached value for this one.");
                 return cachedValue;
             }
 
-
             string targetPath = Path.Combine(Application.persistentDataPath, dataFile);
-            Debug.Log(string.Format("TargetPath: {0}", targetPath));
-            /* if it doesn't exist yet, write out the original persistentDataPath */
+            /* if it doesn't exist yet, write out the original into persistentDataPath */
             if (!File.Exists(targetPath))
             {
                 string originalData = orig_GetDataFile(dataFile);
@@ -184,10 +208,8 @@ namespace Modding
 
             string result = File.ReadAllText(targetPath);
 
-            /* Now return the text with the mods added! */
+            // Add it into the cache for next time.
             cache.Add(dataFile, result);
-            Debug.Log("Getting full value for this one.");
-            Debug.Log(result);
             return result;
         }
     }
