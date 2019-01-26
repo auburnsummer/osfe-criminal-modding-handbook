@@ -7,22 +7,39 @@ using MonoMod;
 using UnityEngine;
 using Assembly_CSharp;
 using System.Runtime.InteropServices;
+using System.Text.RegularExpressions;
 #pragma warning disable CS0626
 namespace Assembly_CSharp
 {
     public static class Utils
     {
+        /* Combines together a list of paths. */
+        public static string CombinePaths(params string[] paths)
+        {
+            if (paths == null)
+            {
+                return null;
+            }
+            string currentPath = paths[0];
+            for (int i = 1; i < paths.Length; i++)
+            {
+                currentPath = Path.Combine(currentPath, paths[i]);
+            }
+            return currentPath;
+        }
+
         public static string modFolder = "DataFiles";
 
         public static string modPath = Path.Combine(Application.persistentDataPath, modFolder);
 
         /*
          * Return a list of file paths corresponding to the given postfix (e.g. ".png")
+         * NB: search RECURSIVELY        
          */
-        public static List<string> GetModFiles(string postfix)
+        public static List<string> GetModFiles(string directory, string postfix)
         {
-            Debug.Log(String.Format("We're looking for files ending with {0}", postfix));
-            string assetsDirectory = Path.Combine(modPath, "AdditionalAssets");
+            Debug.Log(String.Format("We're looking for files ending with {0} in {1}", postfix, directory));
+            string assetsDirectory = CombinePaths(modPath, "AdditionalAssets", directory);
             /* Make the assets directory if it doesn't exist. */
             DirectoryInfo di = Directory.CreateDirectory(assetsDirectory); // Don't need to check first.
             string[] filenames = Directory.GetFiles(assetsDirectory, "*", SearchOption.AllDirectories);
@@ -32,7 +49,7 @@ namespace Assembly_CSharp
                 // .png and .PNG are equally valid
                 if (path.EndsWith(postfix, StringComparison.CurrentCultureIgnoreCase))
                 {
-                    Debug.Log(String.Format("Loading additional data from {0}", path));
+                    Debug.Log(String.Format("Found {0}", path));
                     finalList.Add(path);
                 }
             }
@@ -40,7 +57,22 @@ namespace Assembly_CSharp
 
         }
 
-        public static Sprite LoadNewSprite(string FilePath, float PixelsPerUnit = 100.0f)
+        public static SpriteAnimationClip LoadNewSpriteAnimationClip(string[] FilePaths, float PixelsPerUnit=100.0f, float KeyFrameLength=0.02f)
+        {
+            Debug.Log("Hi, welcome to LoadNewSpriteAnimationClip!");
+            List<Sprite> sprites = new List<Sprite>();
+            List<float> numbers = new List<float>();
+            for (int i = 0; i < FilePaths.Length; i++)
+            {
+                numbers.Add((float)i);
+                Debug.Log(String.Format("Making a sprite from {0}", FilePaths[i]));
+                sprites.Add(LoadNewSprite(FilePaths[i]));
+            }
+            SpriteAnimationClip newClip = new SpriteAnimationClip(KeyFrameLength, numbers.ToArray(), sprites.ToArray());
+            return newClip;
+        }
+
+        public static Sprite LoadNewSprite(string FilePath, float PixelsPerUnit = 1.0f)
         {
             // Load a PNG or JPG image from disk to a Texture2D, assign this texture to a new sprite and return its reference
 
@@ -74,6 +106,31 @@ namespace Assembly_CSharp
             }
             return null; // Return null if load failed
         }
+
+        public static void SpriteAnimationClipDebug(SpriteAnimationClip d)
+        {
+            Debug.Log("SAC DEBUG LOG");
+        }
+    }
+
+    public class AnimClipTemplate : IComparable
+    {
+        public string fullPath { get; set; }
+        public string key { get; set; }
+        public int number { get; set; }
+
+        public AnimClipTemplate(string fullPath, string key, int number)
+        {
+            this.fullPath = fullPath;
+            this.key = key;
+            this.number = number;
+        }
+
+        int IComparable.CompareTo(object obj)
+        {
+            AnimClipTemplate other = (AnimClipTemplate)obj;
+            return number.CompareTo(other.number);
+        }
     }
 
     [MonoModPatch("global::ItemManager")]
@@ -83,34 +140,73 @@ namespace Assembly_CSharp
         [MonoModIgnore]
         public extern void ReadSpellFile(string xmlString);
 
-        public extern void orig_Awake();
-        public void Awake()
+        public void LoadCustomSpellIcons()
         {
-            Debug.Log("Hi from MonoMod on Mac Version 2!");
-            orig_Awake();
-            /* Load additional sprites. */
-            foreach (string path in Utils.GetModFiles(".png"))
+            foreach (string path in Utils.GetModFiles("SpellIcons", ".png"))
             {
-                Debug.Log(String.Format("Okay, I'm going to try and load {0}", path));
+                Debug.Log(String.Format("Okay, I'm going to try and load {0} as a spell icon", path));
                 Sprite new_sprite = Utils.LoadNewSprite(path);
                 this.sprites[Path.GetFileNameWithoutExtension(path)] = new_sprite;
             }
         }
-        /*
+
+        public void LoadCustomAnimClips()
+        {
+            Debug.Log("LOADING THE ANIM CLIPS!!!!!");
+            List<string> paths = Utils.GetModFiles("SpriteAnimationClips", ".png");
+
+
+            Regex animationMatcher = new Regex(@"(\w+)_([0-9]+)", RegexOptions.IgnoreCase);
+            Dictionary<string, List<AnimClipTemplate>> animClips = new Dictionary<string, List<AnimClipTemplate>>();
+            foreach (string path in paths)
+            {
+                Match result = animationMatcher.Match(path);
+                if (result.Success)
+                {
+                    AnimClipTemplate newAnimClipTemplate = new AnimClipTemplate(path, result.Groups[1].Value, int.Parse(result.Groups[2].Value));
+                    if (!animClips.ContainsKey(newAnimClipTemplate.key))
+                    {
+                        animClips[newAnimClipTemplate.key] = new List<AnimClipTemplate>();
+                    }
+                    animClips[newAnimClipTemplate.key].Add(newAnimClipTemplate);
+                }
+            }
+
+            foreach (string key in animClips.Keys)
+            {
+                Debug.Log(String.Format("Getting files for anim cli {0} ", key));
+                List<AnimClipTemplate> currentClipList = animClips[key];
+                currentClipList.Sort();
+                // Make an anim clip now.
+                List<string> fullPaths = new List<string>();
+                foreach (AnimClipTemplate clip in currentClipList)
+                {
+                    fullPaths.Add(clip.fullPath);
+                }
+                SpriteAnimationClip newClip = Utils.LoadNewSpriteAnimationClip(fullPaths.ToArray());
+                this.spriteAnimClips[key] = newClip;
+                Debug.Log("Done with this anim clip!");
+            }
+        }
+
+        public extern void orig_Awake();
+        public void Awake()
+        {
+            Debug.Log("Hi from MonoMod!!");
+            // UserData.RegistrationPolicy = InteropRegistrationPolicy.Automatic;
+            orig_Awake();
+            /* Load additional sprites. */
+            LoadCustomSpellIcons();
+            LoadCustomAnimClips();
+        }
+
         public extern SpriteAnimationClip orig_GetClip(string clipName);
         public new SpriteAnimationClip GetClip(string clipName)
         {
             Debug.Log(String.Format("Getting SpriteAnimationClip {0}", clipName));
+            SpriteAnimationClip theClip = orig_GetClip(clipName);
             return orig_GetClip(clipName);
         }
-
-        public extern RuntimeAnimatorController orig_GetAnim(string animName);
-        public new RuntimeAnimatorController GetAnim(string animName)
-        {
-            Debug.Log(String.Format("Getting Anim {0}", animName));
-            return orig_GetAnim(animName);
-        }
-        */
     }
 
     [MonoModPatch("global::Effect")]
