@@ -11,115 +11,13 @@ using System.Text.RegularExpressions;
 #pragma warning disable CS0626
 namespace Assembly_CSharp
 {
-    public static class Utils
-    {
-        /* Combines together a list of paths. */
-        public static string CombinePaths(params string[] paths)
-        {
-            if (paths == null)
-            {
-                return null;
-            }
-            string currentPath = paths[0];
-            for (int i = 1; i < paths.Length; i++)
-            {
-                currentPath = Path.Combine(currentPath, paths[i]);
-            }
-            return currentPath;
-        }
-
-        public static string modFolder = "DataFiles";
-
-        public static string modPath = Path.Combine(Application.persistentDataPath, modFolder);
-
-        /*
-         * Return a list of file paths corresponding to the given postfix (e.g. ".png")
-         * NB: search RECURSIVELY        
-         */
-        public static List<string> GetModFiles(string directory, string postfix)
-        {
-            Debug.Log(String.Format("We're looking for files ending with {0} in {1}", postfix, directory));
-            string assetsDirectory = CombinePaths(modPath, "AdditionalAssets", directory);
-            /* Make the assets directory if it doesn't exist. */
-            DirectoryInfo di = Directory.CreateDirectory(assetsDirectory); // Don't need to check first.
-            string[] filenames = Directory.GetFiles(assetsDirectory, "*", SearchOption.AllDirectories);
-            List<string> finalList = new List<string>();
-            foreach (string path in filenames)
-            {
-                // .png and .PNG are equally valid
-                if (path.EndsWith(postfix, StringComparison.CurrentCultureIgnoreCase))
-                {
-                    Debug.Log(String.Format("Found {0}", path));
-                    finalList.Add(path);
-                }
-            }
-            return finalList;
-
-        }
-
-        public static SpriteAnimationClip LoadNewSpriteAnimationClip(string[] FilePaths, float PixelsPerUnit=100.0f, float KeyFrameLength=0.02f)
-        {
-            Debug.Log("Hi, welcome to LoadNewSpriteAnimationClip!");
-            List<Sprite> sprites = new List<Sprite>();
-            List<float> numbers = new List<float>();
-            for (int i = 0; i < FilePaths.Length; i++)
-            {
-                numbers.Add((float)i);
-                Debug.Log(String.Format("Making a sprite from {0}", FilePaths[i]));
-                sprites.Add(LoadNewSprite(FilePaths[i]));
-            }
-            SpriteAnimationClip newClip = new SpriteAnimationClip(KeyFrameLength, numbers.ToArray(), sprites.ToArray());
-            return newClip;
-        }
-
-        public static Sprite LoadNewSprite(string FilePath, float PixelsPerUnit = 1.0f)
-        {
-            // Load a PNG or JPG image from disk to a Texture2D, assign this texture to a new sprite and return its reference
-
-            Sprite NewSprite = new Sprite();
-            Texture2D SpriteTexture = LoadTexture(FilePath);
-            NewSprite = Sprite.Create(SpriteTexture, new Rect(0, 0, SpriteTexture.width, SpriteTexture.height), new Vector2(0.5f, 0.5f), PixelsPerUnit, 1);
-
-            return NewSprite;
-        }
-
-        public static Texture2D LoadTexture(string FilePath)
-        {
-
-            // Load a PNG or JPG file from disk to a Texture2D
-            // Returns null if load fails
-
-            Texture2D Tex2D;
-            byte[] FileData;
-
-            if (File.Exists(FilePath))
-            {
-                FileData = File.ReadAllBytes(FilePath);
-                Tex2D = new Texture2D(40, 40, TextureFormat.RGBA32, false); // Create new "empty" texture
-                if (Tex2D.LoadImage(FileData))
-                {   // Load the imagedata into the texture (size is set automatically)
-                    Tex2D.filterMode = FilterMode.Point;
-                    Tex2D.wrapMode = TextureWrapMode.Clamp;
-                    Tex2D.anisoLevel = 1;
-                    return Tex2D; // If data = readable -> return texture
-                }
-            }
-            return null; // Return null if load failed
-        }
-
-        public static void SpriteAnimationClipDebug(SpriteAnimationClip d)
-        {
-            Debug.Log("SAC DEBUG LOG");
-        }
-    }
-
-    public class AnimClipTemplate : IComparable
+    public class AnimClipFrame : IComparable
     {
         public string fullPath { get; set; }
         public string key { get; set; }
         public int number { get; set; }
 
-        public AnimClipTemplate(string fullPath, string key, int number)
+        public AnimClipFrame(string fullPath, string key, int number)
         {
             this.fullPath = fullPath;
             this.key = key;
@@ -128,7 +26,7 @@ namespace Assembly_CSharp
 
         int IComparable.CompareTo(object obj)
         {
-            AnimClipTemplate other = (AnimClipTemplate)obj;
+            AnimClipFrame other = (AnimClipFrame)obj;
             return number.CompareTo(other.number);
         }
     }
@@ -155,34 +53,39 @@ namespace Assembly_CSharp
             Debug.Log("LOADING THE ANIM CLIPS!!!!!");
             List<string> paths = Utils.GetModFiles("SpriteAnimationClips", ".png");
 
-
+            // Pattern to be considered a frame: alphanumeric "ID" portion and the frame number, seperated with an underscore.
             Regex animationMatcher = new Regex(@"(\w+)_([0-9]+)", RegexOptions.IgnoreCase);
-            Dictionary<string, List<AnimClipTemplate>> animClips = new Dictionary<string, List<AnimClipTemplate>>();
+            Dictionary<string, List<AnimClipFrame>> animClips = new Dictionary<string, List<AnimClipFrame>>();
             foreach (string path in paths)
             {
                 Match result = animationMatcher.Match(path);
                 if (result.Success)
                 {
-                    AnimClipTemplate newAnimClipTemplate = new AnimClipTemplate(path, result.Groups[1].Value, int.Parse(result.Groups[2].Value));
-                    if (!animClips.ContainsKey(newAnimClipTemplate.key))
+                    AnimClipFrame newAnimClipFrame = new AnimClipFrame(path, result.Groups[1].Value, int.Parse(result.Groups[2].Value));
+                    // Make a new list for the anim clip key if it doesn't exist already
+                    if (!animClips.ContainsKey(newAnimClipFrame.key))
                     {
-                        animClips[newAnimClipTemplate.key] = new List<AnimClipTemplate>();
+                        animClips[newAnimClipFrame.key] = new List<AnimClipFrame>();
                     }
-                    animClips[newAnimClipTemplate.key].Add(newAnimClipTemplate);
+                    animClips[newAnimClipFrame.key].Add(newAnimClipFrame);
                 }
             }
 
             foreach (string key in animClips.Keys)
             {
-                Debug.Log(String.Format("Getting files for anim cli {0} ", key));
-                List<AnimClipTemplate> currentClipList = animClips[key];
-                currentClipList.Sort();
+                Debug.Log(String.Format("Getting files for anim clip {0} ", key));
+                List<AnimClipFrame> currentFrames = animClips[key];
+                // sorting is required since the files could be like
+                // Sprite_9.png, Sprite_10.png (the 10 would be first in lexographic sort!)
+                currentFrames.Sort();
+
                 // Make an anim clip now.
                 List<string> fullPaths = new List<string>();
-                foreach (AnimClipTemplate clip in currentClipList)
+                foreach (AnimClipFrame clip in currentFrames)
                 {
                     fullPaths.Add(clip.fullPath);
                 }
+                // TODO: get keyFrameLength from an XML file, maybe PixelsPerUnit too?
                 SpriteAnimationClip newClip = Utils.LoadNewSpriteAnimationClip(fullPaths.ToArray());
                 this.spriteAnimClips[key] = newClip;
                 Debug.Log("Done with this anim clip!");
