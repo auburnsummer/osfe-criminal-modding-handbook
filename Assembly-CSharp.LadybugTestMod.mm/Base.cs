@@ -33,6 +33,9 @@ namespace Assembly_CSharp
             Debug.Log("LOADING THE ANIM CLIPS!!!!!");
             List<string> paths = PathMan.GetModFiles(PathMan.ANIM_CLIPS_PATH, ".png");
 
+            Dictionary<string, AnimClipInfo> clipInfos = Utils.GetAnimClipInfos();
+            AnimClipInfo defaultClipInto = new AnimClipInfo(); // if it is not defined in the XML
+
             // Pattern to be considered a frame: alphanumeric "ID" portion and the frame number, seperated with an underscore.
             Regex frameMatchRegex = new Regex(@"(\w+)_([0-9]+)", RegexOptions.IgnoreCase);
 
@@ -68,8 +71,16 @@ namespace Assembly_CSharp
                 {
                     fullPaths.Add(clip.fullPath);
                 }
-                // TODO: get keyFrameLength from an XML file, maybe PixelsPerUnit too?
-                SpriteAnimationClip newClip = Utils.LoadNewSpriteAnimationClip(fullPaths.ToArray());
+                AnimClipInfo newInfo;
+                if (!clipInfos.ContainsKey(key))
+                {
+                    newInfo = defaultClipInto;
+                }
+                else
+                {
+                    newInfo = clipInfos[key];
+                }
+                SpriteAnimationClip newClip = Utils.LoadNewSpriteAnimationClip(fullPaths.ToArray(), newInfo);
                 this.spriteAnimClips[key] = newClip;
                 Debug.Log("Done with this anim clip!");
             }
@@ -84,7 +95,6 @@ namespace Assembly_CSharp
             /* Load additional sprites. */
             LoadCustomSpellIcons();
             LoadCustomAnimClips();
-            Utils.Test();
         }
 
         public extern SpriteAnimationClip orig_GetClip(string clipName);

@@ -2,12 +2,13 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
+using System.Xml;
 using UnityEngine;
 namespace Assembly_CSharp
 {
     public static class Utils
     {
-        public static SpriteAnimationClip LoadNewSpriteAnimationClip(string[] FilePaths, float PixelsPerUnit = 100.0f, float KeyFrameLength = 0.02f)
+        public static SpriteAnimationClip LoadNewSpriteAnimationClip(string[] FilePaths, AnimClipInfo theInfo)
         {
             Debug.Log("Hi, welcome to LoadNewSpriteAnimationClip!");
             List<Sprite> sprites = new List<Sprite>();
@@ -18,7 +19,7 @@ namespace Assembly_CSharp
                 Debug.Log(String.Format("FRAME {0} IMAGE {1}", i, FilePaths[i]));
                 sprites.Add(LoadNewSprite(FilePaths[i]));
             }
-            SpriteAnimationClip newClip = new SpriteAnimationClip(KeyFrameLength, numbers.ToArray(), sprites.ToArray());
+            SpriteAnimationClip newClip = new SpriteAnimationClip(theInfo.keyFrameLength, numbers.ToArray(), sprites.ToArray());
             return newClip;
         }
 
@@ -58,10 +59,38 @@ namespace Assembly_CSharp
             return null; // Return null if load failed
         }
 
-        public static void Test()
+        public static Dictionary<string, AnimClipInfo> GetAnimClipInfos()
         {
-            Debug.Log("TESTING EMBEDDED RESOURCES");
-            Debug.Log(PathMan.GetModInternalFile(PathMan.ANIM_CLIPS_PATH, "AnimClips.xml", "AssemblyCSharp.LadybugTestMod.mm.InitialAnimClipXml.xml"));
+            Debug.Log("Getting anim clip info!");
+            string rawXml = PathMan.GetModInternalFile(PathMan.ANIM_CLIPS_PATH, "AnimClips.xml", "AssemblyCSharp.LadybugTestMod.mm.InitialAnimClipXml.xml");
+            XmlReader xmlReader = XmlReader.Create(new StringReader(rawXml));
+            Dictionary<string, AnimClipInfo> animClipInfos = new Dictionary<string, AnimClipInfo>();
+
+            if (xmlReader.ReadToDescendant("AnimClips") && xmlReader.ReadToDescendant("AnimClip"))
+            {
+                // we're now parallel to the anim clip elements.
+                do
+                {
+                    string id = xmlReader.GetAttribute("id");
+                    animClipInfos[id] = new AnimClipInfo();
+                    XmlReader subtree = xmlReader.ReadSubtree();
+                    while (subtree.Read())
+                    {
+                        string tag = subtree.Name;
+                        switch (tag)
+                        {
+                        case "KeyFrameLength":
+                                subtree.Read();
+                                animClipInfos[id].keyFrameLength = subtree.ReadContentAsFloat();
+                                break;
+                        }
+                    }
+
+                } while (xmlReader.ReadToNextSibling("AnimClip"));
+            }
+
+            return animClipInfos;
+
         }
     }
 
@@ -89,7 +118,7 @@ namespace Assembly_CSharp
     // properties with anim clips in the future?
     public class AnimClipInfo
     {
-        public float keyFrameLength = 0.05f;
+        public float keyFrameLength { get; set; }
         public AnimClipInfo(float keyFrameLength = 0.05f)
         {
             this.keyFrameLength = keyFrameLength;
