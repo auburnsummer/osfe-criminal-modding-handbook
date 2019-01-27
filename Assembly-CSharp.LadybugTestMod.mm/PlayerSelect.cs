@@ -10,8 +10,17 @@ namespace Assembly_CSharp
 {
     class PlayerSelect
     {
+        private static List<string> moddedChars = new List<string>();
+
         public static string[] getCharacters() {
-            return new string[] {"SaffronDemo","SaffronDemoCiel", "RevaDemo"};
+            string[] chars = new string[3 + moddedChars.Count];
+            chars[0] = "SaffronDemo";
+            chars[1] = "SaffronDemoCiel";
+            chars[2] = "RevaDemo";
+            int i = 3;
+            foreach (string s in moddedChars)
+                chars[i++] = s;
+            return chars;
         }
 
         [MonoModPatch("global::OptionCtrl")]
@@ -56,18 +65,17 @@ namespace Assembly_CSharp
                 //NPE Prevention
                 if (ctrl.runCtrl.spCtrl == null)
                 {
+                    PlayerPrefs.SetInt("RevaDemoEnabled", 0);
                     revaText.text = heroName;
                     revaDisplay.runtimeAnimatorController = this.itemMan.GetAnim(heroAnim);
                     setup = false;
                     return;
                 }
-                Dictionary<string, BeingObject> heroDictionary = ctrl.runCtrl.spCtrl.heroDictionary;
-                //Handle skins(for now, just SaffronCiel)
                 if (!setup) {
-                    setupSkins(heroDictionary);
+                    setupCustomsAndSkins();
                     setup = true;
                 }
-                BeingObject hero = heroDictionary[PlayerSelect.getCharacters()[option]];
+                BeingObject hero = ctrl.runCtrl.spCtrl.heroDictionary[PlayerSelect.getCharacters()[option]];
                 revaDisplay.runtimeAnimatorController = this.itemMan.GetAnim(hero.animName);
                 revaDisplay.SetTrigger("spawn");
                 revaText.text = hero.nameString;
@@ -76,18 +84,37 @@ namespace Assembly_CSharp
                 heroName = hero.nameString;
             }
 
-            private void setupSkins(Dictionary<string, BeingObject> heroDictionary)
-            {
-                BeingObject orig_Saffron = heroDictionary["SaffronDemo"];
-                BeingObject SaffronCiel = orig_Saffron.Clone();
+            private void setupCustomsAndSkins(){
+                //Skins handled here (Just Ciel for now)
+                Dictionary<string,BeingObject> heroDictionary = ctrl.runCtrl.spCtrl.heroDictionary;
+                BeingObject SaffronCiel = heroDictionary["SaffronDemo"].Clone();
                 SaffronCiel.animName = "SaffronCiel";
                 heroDictionary.Add("SaffronDemoCiel", SaffronCiel);
+                ctrl.runCtrl.spCtrl.heroDictionary = heroDictionary;
+                
+                //Find characters to add to the menu
+                moddedChars.Clear();
+                foreach (KeyValuePair<String, BeingObject> entry in heroDictionary)
+                    if (entry.Value.tags.Contains("Selectable"))
+                        moddedChars.Add(entry.Value.beingID);
+            }
+        }
+
+        //Actually set the player to the selection
+        [MonoModPatch("global::RunCtrl")]
+        public class patch_RunCtrl : RunCtrl {
+            public extern void orig_ResetWorld();
+            public void ResetWorld(){
+                orig_ResetWorld();
+                defaultHeroString = patch_RevaDisplay.heroID;
+                demoHeroString = patch_RevaDisplay.heroID;
             }
         }
         //Make players spawn based on the new values
         [MonoModPatch("global::SpawnCtrl")]
         public class patch_SpawnCtrl : SpawnCtrl
         {
+            [MonoModReplace]
             public void CreatePlayers()
             {
                 if (S.I.AUTOMATION)
