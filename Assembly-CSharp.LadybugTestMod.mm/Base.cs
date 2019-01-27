@@ -11,26 +11,6 @@ using System.Text.RegularExpressions;
 #pragma warning disable CS0626
 namespace Assembly_CSharp
 {
-    public class AnimClipFrame : IComparable
-    {
-        public string fullPath { get; set; }
-        public string key { get; set; }
-        public int number { get; set; }
-
-        public AnimClipFrame(string fullPath, string key, int number)
-        {
-            this.fullPath = fullPath;
-            this.key = key;
-            this.number = number;
-        }
-
-        int IComparable.CompareTo(object obj)
-        {
-            AnimClipFrame other = (AnimClipFrame)obj;
-            return number.CompareTo(other.number);
-        }
-    }
-
     [MonoModPatch("global::ItemManager")]
     public class patch_ItemManager : ItemManager
     {
@@ -40,7 +20,7 @@ namespace Assembly_CSharp
 
         public void LoadCustomSpellIcons()
         {
-            foreach (string path in Utils.GetModFiles("SpellIcons", ".png"))
+            foreach (string path in PathMan.GetModFiles(PathMan.ICONS_PATH, ".png"))
             {
                 Debug.Log(String.Format("Okay, I'm going to try and load {0} as a spell icon", path));
                 Sprite new_sprite = Utils.LoadNewSprite(path);
@@ -51,14 +31,20 @@ namespace Assembly_CSharp
         public void LoadCustomAnimClips()
         {
             Debug.Log("LOADING THE ANIM CLIPS!!!!!");
-            List<string> paths = Utils.GetModFiles("SpriteAnimationClips", ".png");
+            List<string> paths = PathMan.GetModFiles(PathMan.ANIM_CLIPS_PATH, ".png");
+
+            Dictionary<string, AnimClipInfo> clipInfos = Utils.GetAnimClipInfos();
+            AnimClipInfo defaultClipInto = new AnimClipInfo(); // if it is not defined in the XML
 
             // Pattern to be considered a frame: alphanumeric "ID" portion and the frame number, seperated with an underscore.
-            Regex animationMatcher = new Regex(@"(\w+)_([0-9]+)", RegexOptions.IgnoreCase);
+            Regex frameMatchRegex = new Regex(@"(\w+)_([0-9]+)", RegexOptions.IgnoreCase);
+
+            // The key is the id of the anim clip, the value is the list of frames for that clip.
             Dictionary<string, List<AnimClipFrame>> animClips = new Dictionary<string, List<AnimClipFrame>>();
+
             foreach (string path in paths)
             {
-                Match result = animationMatcher.Match(path);
+                Match result = frameMatchRegex.Match(path);
                 if (result.Success)
                 {
                     AnimClipFrame newAnimClipFrame = new AnimClipFrame(path, result.Groups[1].Value, int.Parse(result.Groups[2].Value));
@@ -85,8 +71,16 @@ namespace Assembly_CSharp
                 {
                     fullPaths.Add(clip.fullPath);
                 }
-                // TODO: get keyFrameLength from an XML file, maybe PixelsPerUnit too?
-                SpriteAnimationClip newClip = Utils.LoadNewSpriteAnimationClip(fullPaths.ToArray());
+                AnimClipInfo newInfo;
+                if (!clipInfos.ContainsKey(key))
+                {
+                    newInfo = defaultClipInto;
+                }
+                else
+                {
+                    newInfo = clipInfos[key];
+                }
+                SpriteAnimationClip newClip = Utils.LoadNewSpriteAnimationClip(fullPaths.ToArray(), newInfo);
                 this.spriteAnimClips[key] = newClip;
                 Debug.Log("Done with this anim clip!");
             }
@@ -137,7 +131,7 @@ namespace Assembly_CSharp
         {
             Debug.Log(String.Format("Getting DataFile {0}", dataFile));
 
-            string targetPath = Path.Combine(Utils.modPath, dataFile);
+            string targetPath = Path.Combine(PathMan.MOD_PATH, dataFile);      
             /* if it doesn't exist yet, write out the original into persistentDataPath */
             if (!File.Exists(targetPath))
             {

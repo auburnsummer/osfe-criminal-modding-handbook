@@ -1,56 +1,14 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Reflection;
+using System.Xml;
 using UnityEngine;
 namespace Assembly_CSharp
 {
     public static class Utils
     {
-        /* Combines together a list of paths. */
-        public static string CombinePaths(params string[] paths)
-        {
-            if (paths == null)
-            {
-                return null;
-            }
-            string currentPath = paths[0];
-            for (int i = 1; i < paths.Length; i++)
-            {
-                currentPath = Path.Combine(currentPath, paths[i]);
-            }
-            return currentPath;
-        }
-
-        public static string modFolder = "DataFiles";
-
-        public static string modPath = Path.Combine(Application.persistentDataPath, modFolder);
-
-        /*
-         * Return a list of file paths corresponding to the given postfix (e.g. ".png")
-         * NB: search RECURSIVELY        
-         */
-        public static List<string> GetModFiles(string directory, string postfix)
-        {
-            Debug.Log(String.Format("We're looking for files ending with {0} in {1}", postfix, directory));
-            string assetsDirectory = CombinePaths(modPath, "AdditionalAssets", directory);
-            /* Make the assets directory if it doesn't exist. */
-            DirectoryInfo di = Directory.CreateDirectory(assetsDirectory); // Don't need to check first.
-            string[] filenames = Directory.GetFiles(assetsDirectory, "*", SearchOption.AllDirectories);
-            List<string> finalList = new List<string>();
-            foreach (string path in filenames)
-            {
-                // .png and .PNG are equally valid
-                if (path.EndsWith(postfix, StringComparison.CurrentCultureIgnoreCase))
-                {
-                    Debug.Log(String.Format("Found {0}", path));
-                    finalList.Add(path);
-                }
-            }
-            return finalList;
-
-        }
-
-        public static SpriteAnimationClip LoadNewSpriteAnimationClip(string[] FilePaths, float PixelsPerUnit = 100.0f, float KeyFrameLength = 0.02f)
+        public static SpriteAnimationClip LoadNewSpriteAnimationClip(string[] FilePaths, AnimClipInfo theInfo)
         {
             Debug.Log("Hi, welcome to LoadNewSpriteAnimationClip!");
             List<Sprite> sprites = new List<Sprite>();
@@ -58,10 +16,10 @@ namespace Assembly_CSharp
             for (int i = 0; i < FilePaths.Length; i++)
             {
                 numbers.Add((float)i);
-                Debug.Log(String.Format("Making a sprite from {0}", FilePaths[i]));
+                Debug.Log(String.Format("FRAME {0} IMAGE {1}", i, FilePaths[i]));
                 sprites.Add(LoadNewSprite(FilePaths[i]));
             }
-            SpriteAnimationClip newClip = new SpriteAnimationClip(KeyFrameLength, numbers.ToArray(), sprites.ToArray());
+            SpriteAnimationClip newClip = new SpriteAnimationClip(theInfo.keyFrameLength, numbers.ToArray(), sprites.ToArray());
             return newClip;
         }
 
@@ -78,7 +36,6 @@ namespace Assembly_CSharp
 
         public static Texture2D LoadTexture(string FilePath)
         {
-
             // Load a PNG or JPG file from disk to a Texture2D
             // Returns null if load fails
 
@@ -91,6 +48,8 @@ namespace Assembly_CSharp
                 Tex2D = new Texture2D(40, 40, TextureFormat.RGBA32, false); // Create new "empty" texture
                 if (Tex2D.LoadImage(FileData))
                 {   // Load the imagedata into the texture (size is set automatically)
+
+                    // various fixes to stop blurry sprites
                     Tex2D.filterMode = FilterMode.Point;
                     Tex2D.wrapMode = TextureWrapMode.Clamp;
                     Tex2D.anisoLevel = 1;
@@ -98,6 +57,71 @@ namespace Assembly_CSharp
                 }
             }
             return null; // Return null if load failed
+        }
+
+        public static Dictionary<string, AnimClipInfo> GetAnimClipInfos()
+        {
+            Debug.Log("Getting anim clip info!");
+            string rawXml = PathMan.GetModInternalFile(PathMan.ANIM_CLIPS_PATH, "AnimClips.xml", "AssemblyCSharp.LadybugTestMod.mm.InitialAnimClipXml.xml");
+            XmlReader xmlReader = XmlReader.Create(new StringReader(rawXml));
+            Dictionary<string, AnimClipInfo> animClipInfos = new Dictionary<string, AnimClipInfo>();
+
+            if (xmlReader.ReadToDescendant("AnimClips") && xmlReader.ReadToDescendant("AnimClip"))
+            {
+                // we're now parallel to the anim clip elements.
+                do
+                {
+                    string id = xmlReader.GetAttribute("id");
+                    animClipInfos[id] = new AnimClipInfo();
+                    XmlReader subtree = xmlReader.ReadSubtree();
+                    while (subtree.Read())
+                    {
+                        string tag = subtree.Name;
+                        switch (tag)
+                        {
+                        case "KeyFrameLength":
+                                subtree.Read();
+                                animClipInfos[id].keyFrameLength = subtree.ReadContentAsFloat();
+                                break;
+                        }
+                    }
+
+                } while (xmlReader.ReadToNextSibling("AnimClip"));
+            }
+
+            return animClipInfos;
+
+        }
+    }
+
+    public class AnimClipFrame : IComparable
+    {
+        public string fullPath { get; set; }
+        public string key { get; set; }
+        public int number { get; set; }
+
+        public AnimClipFrame(string fullPath, string key, int number)
+        {
+            this.fullPath = fullPath;
+            this.key = key;
+            this.number = number;
+        }
+
+        int IComparable.CompareTo(object obj)
+        {
+            AnimClipFrame other = (AnimClipFrame)obj;
+            return number.CompareTo(other.number);
+        }
+    }
+
+    // Only stores keyFrameLength at the moment but maybe they'll be more
+    // properties with anim clips in the future?
+    public class AnimClipInfo
+    {
+        public float keyFrameLength { get; set; }
+        public AnimClipInfo(float keyFrameLength = 0.05f)
+        {
+            this.keyFrameLength = keyFrameLength;
         }
     }
 }

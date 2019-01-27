@@ -74,6 +74,10 @@
     <Compile Include="Base.cs" />
 	<Compile Include="PlayerSelect.cs" />
     <Compile Include="Utils.cs" />
+    <Compile Include="PathMan.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="InitialAnimClipXml.xml" />
   </ItemGroup>
   <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
 </Project>
