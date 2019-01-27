@@ -1,0 +1,7 @@
+﻿<?xml version="1.0" encoding="UTF-8" ?>
+<AnimClips>
+    <!-- Example -->
+    <AnimClip id="ExampleAnimClip">
+        <KeyFrameLength>0.05</KeyFrameLength>
+    </AnimClip>
+</AnimClips>
