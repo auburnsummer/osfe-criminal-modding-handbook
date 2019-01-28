@@ -6,6 +6,8 @@ using System.Threading.Tasks;
 using MonoMod;
 using UnityEngine;
 
+#pragma warning disable CS0626
+
 namespace Assembly_CSharp
 {
     class PlayerSelect
