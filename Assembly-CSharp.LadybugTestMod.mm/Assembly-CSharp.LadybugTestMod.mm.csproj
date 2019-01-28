@@ -72,6 +72,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Base.cs" />
+	<Compile Include="PlayerSelect.cs" />
     <Compile Include="Utils.cs" />
     <Compile Include="PathMan.cs" />
   </ItemGroup>
