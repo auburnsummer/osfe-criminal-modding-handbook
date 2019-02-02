@@ -90,12 +90,13 @@ namespace Assembly_CSharp
             if (initialModList.Count == 0)
             {
                 // It's not in the mod directory yet, so load it from our internal resources.
+                
                 Stream stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(resourceID);
                 using (StreamReader reader = new StreamReader(stream))
                 {
                     string result = reader.ReadToEnd();
                     File.WriteAllText(targetPath, result);
-                    initialModList.Add(File.ReadAllText(targetPath));
+                    initialModList.Add(targetPath);
                 }
             }
             // This will either be the thing we just wrote out, or one already written.
